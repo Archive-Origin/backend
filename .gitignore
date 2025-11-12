@@ -1,0 +1,13 @@
+.env
+*.env
+*.log
+__pycache__/
+*.py[cod]
+
+# Docker/PostgreSQL volume data
+archiveorigin_backend_api/db/
+
+# Cloudflare tunnel artifacts
+archiveorigin_backend_api/cloudflared_api.log
+archiveorigin_backend_api/cloudflared_api_err.log
+archiveorigin_backend_api/cloudflared_api_process.txt

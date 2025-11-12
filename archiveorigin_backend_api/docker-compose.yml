@@ -1,0 +1,59 @@
+version: "3.9"
+services:
+  db:
+    container_name: archiveorigin-db
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: archiveorigin
+      POSTGRES_PASSWORD: supersecret
+      POSTGRES_DB: origin_proofs
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U archiveorigin -d origin_proofs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    container_name: archiveorigin-api
+    build: ./app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - VERIFY_BASE_URL=${VERIFY_BASE_URL}
+      - DEVICE_TOKEN_TTL_SECONDS=${DEVICE_TOKEN_TTL_SECONDS}
+      - DEVICE_TOKEN_RENEWAL_BUFFER=${DEVICE_TOKEN_RENEWAL_BUFFER}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - VERIFY_SIGNATURES=${VERIFY_SIGNATURES}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    container_name: archiveorigin-web
+    build: ./site
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+
+  verify:
+    container_name: archiveorigin-verify
+    build: ./verify
+    restart: unless-stopped
+    environment:
+      - VERIFY_BASE_URL=${VERIFY_BASE_URL}
+    ports:
+      - "8099:80"
