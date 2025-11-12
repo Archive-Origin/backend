@@ -7,6 +7,9 @@ This stack exposes two core endpoints for device enrollment and capture proof lo
 - `POST /device/enroll` - enroll or renew a device token
 - `POST /lock-proof` - store an immutable capture proof (requires headers + bearer token)
 - `GET /health` - health & DB check
+- `POST /api/v1/verify` - verify proof-only payloads against ledger and certificate store
+- `POST /api/v1/ledger/lookup` - whitelisted ledger inspector
+- `GET /api/v1/certs/{cert_hash}` - retrieve attestation cert metadata/PEM
 
 ## Quickstart
 
@@ -34,6 +37,9 @@ curl -s http://localhost:8001/health
 - `LEDGER_GIT_AUTO_COMMIT` - set to `true` to auto-commit ledger updates
 - `LEDGER_GIT_AUTO_PUSH` - set to `true` to auto-push after committing (implies auto-commit)
 - `LEDGER_GIT_REMOTE` / `LEDGER_GIT_BRANCH` - Git target for automatic pushes
+- `DEVICECHECK_*` - enable Apple DeviceCheck validation (team/key/private key/bundle allow list)
+- `ATTESTATION_SEED_DIR` - optional directory containing PEM/CRT certificates ingested on startup
+- `CRL_SOURCES` / `CRL_AUTO_REFRESH` / `CRL_REFRESH_INTERVAL_SECONDS` - configure CRL fetching and revocation enforcement for attestation certs
 
 ## Schema
 
@@ -58,6 +64,11 @@ See CLI options:
 ```bash
 docker compose exec api python -m ledger --help
 ```
+
+## Verification Flow & Docs
+
+- See `docs/verification_flow.md` for the privacy-preserving verification protocol and operational guidance (DeviceCheck, attestation seeding, CRL refresh).
+- Run `python -m pytest` to execute validation, attestation, and verification-flow tests.
 
 ## Notes
 

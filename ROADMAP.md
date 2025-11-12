@@ -2,4 +2,5 @@
 
 - [x] DeviceCheck integration
 - [x] Attestation/ledger hardening (attestation seeding + CRL refresh utilities)
-- [ ] Docs & tests (OpenAPI, runbooks, expanded verification tests)
+- [x] Docs & tests (OpenAPI, runbooks, expanded verification tests)
+- [ ] Future hardening (HSM/KMS integration, OCSP jobs, OpenAPI publishing)

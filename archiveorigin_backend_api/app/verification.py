@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import timedelta, timezone
 from threading import Lock
 from typing import Any, Dict, Optional
 
@@ -138,8 +138,11 @@ def _verify_manifest(payload: VerifyRequest, entry: LedgerEntry, notes: list[str
 
 def _verify_timestamp(entry: LedgerEntry, notes: list[str]) -> bool:
     trusted_now = trusted_time.now()
+    timestamp = entry.timestamp_utc
+    if timestamp and timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
     # Reject if entry timestamp is in future beyond 2 minutes
-    if entry.timestamp_utc and (entry.timestamp_utc - trusted_now).total_seconds() > 120:
+    if timestamp and (timestamp - trusted_now).total_seconds() > 120:
         notes.append("timestamp_in_future")
         return False
     return True
