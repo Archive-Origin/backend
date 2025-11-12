@@ -54,5 +54,11 @@ CREATE TABLE IF NOT EXISTS attestation_certs (
   revoked BOOLEAN NOT NULL DEFAULT FALSE,
   revoked_at TIMESTAMPTZ,
   revocation_reason TEXT,
-  created_at_utc TIMESTAMPTZ NOT NULL
+  created_at_utc TIMESTAMPTZ NOT NULL,
+  serial_number VARCHAR(128),
+  issuer TEXT,
+  crl_urls TEXT,
+  last_checked_at TIMESTAMPTZ
 );
+
+CREATE INDEX IF NOT EXISTS idx_attestation_serial ON attestation_certs (serial_number);

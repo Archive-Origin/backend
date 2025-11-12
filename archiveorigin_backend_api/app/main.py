@@ -11,7 +11,7 @@ import logging
 import uuid
 
 from config import settings
-from db import get_db, engine
+from db import get_db, engine, SessionLocal
 from models import Base, DeviceToken, CaptureRecord, AttestationCertificate
 from schemas import (
     EnrollRequest,
@@ -34,6 +34,9 @@ from auth import authenticate_request
 from rate_limit import global_rate_limiter
 from verification import perform_verification, perform_ledger_lookup
 from time_sync import trusted_time
+from devicecheck import get_devicecheck_client, DeviceCheckError
+from attestation import ingest_certificates_from_dir
+from crl import refresh_crls
 
 logger = logging.getLogger("archiveorigin.api")
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -58,6 +61,28 @@ with engine.begin() as conn:
     except Exception as e:
         logger.info("Migrations already applied or failed non-fatally: %s", e)
 
+def _seed_attestation_store():
+    if not settings.attestation_seed_dir:
+        return
+    try:
+        with SessionLocal() as session:
+            ingest_certificates_from_dir(settings.attestation_seed_dir, session)
+            session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to ingest attestation certs: %s", exc)
+
+def _maybe_refresh_crls():
+    if not settings.crl_auto_refresh:
+        return
+    try:
+        with SessionLocal() as session:
+            refresh_crls(session)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("CRL refresh failed: %s", exc)
+
+_seed_attestation_store()
+_maybe_refresh_crls()
+
 def _require_tls(request: Request):
     if not settings.tls_required:
         return
@@ -80,6 +105,31 @@ def _rate_limit(request: Request, identity):
     if not global_rate_limiter.hit(key, identity.rate_limit):
         raise HTTPException(status_code=429, detail="rate_limited")
 
+def _enforce_devicecheck(payload: EnrollRequest):
+    if not settings.devicecheck_enabled:
+        return
+    if not payload.devicecheck_token:
+        raise HTTPException(status_code=400, detail="devicecheck_token_required")
+    if settings.devicecheck_allowed_bundle_ids:
+        if not payload.bundle_id:
+            raise HTTPException(status_code=400, detail="bundle_id_required")
+        if payload.bundle_id not in settings.devicecheck_allowed_bundle_ids:
+            raise HTTPException(status_code=403, detail="bundle_id_not_allowed")
+    client = get_devicecheck_client()
+    try:
+        client.validate(
+            device_token=payload.devicecheck_token,
+            device_id=payload.device_id,
+            bundle_id=payload.bundle_id,
+        )
+    except DeviceCheckError as exc:
+        logger.warning(
+            "DeviceCheck validation failed for device_id=%s reason=%s",
+            payload.device_id,
+            exc.reason,
+        )
+        raise HTTPException(status_code=403, detail=f"devicecheck_{exc.reason}")
+
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
     try:
@@ -94,6 +144,7 @@ def enroll_device(payload: EnrollRequest, request: Request, db: Session = Depend
     # Validate public key format early
     if not validate_pubkey_format(payload.public_key):
         raise HTTPException(status_code=400, detail="public_key must be 'ed25519:<base64>'")
+    _enforce_devicecheck(payload)
 
     existing = db.get(DeviceToken, payload.device_id)
 

@@ -57,3 +57,7 @@ class AttestationCertificate(Base):
     revoked_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at_utc: Mapped[str] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    issuer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    crl_urls: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_checked_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
