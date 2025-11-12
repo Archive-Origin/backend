@@ -34,6 +34,7 @@ from auth import authenticate_request
 from rate_limit import global_rate_limiter
 from verification import perform_verification, perform_ledger_lookup
 from time_sync import trusted_time
+from devicecheck import get_devicecheck_client, DeviceCheckError
 
 logger = logging.getLogger("archiveorigin.api")
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -80,6 +81,31 @@ def _rate_limit(request: Request, identity):
     if not global_rate_limiter.hit(key, identity.rate_limit):
         raise HTTPException(status_code=429, detail="rate_limited")
 
+def _enforce_devicecheck(payload: EnrollRequest):
+    if not settings.devicecheck_enabled:
+        return
+    if not payload.devicecheck_token:
+        raise HTTPException(status_code=400, detail="devicecheck_token_required")
+    if settings.devicecheck_allowed_bundle_ids:
+        if not payload.bundle_id:
+            raise HTTPException(status_code=400, detail="bundle_id_required")
+        if payload.bundle_id not in settings.devicecheck_allowed_bundle_ids:
+            raise HTTPException(status_code=403, detail="bundle_id_not_allowed")
+    client = get_devicecheck_client()
+    try:
+        client.validate(
+            device_token=payload.devicecheck_token,
+            device_id=payload.device_id,
+            bundle_id=payload.bundle_id,
+        )
+    except DeviceCheckError as exc:
+        logger.warning(
+            "DeviceCheck validation failed for device_id=%s reason=%s",
+            payload.device_id,
+            exc.reason,
+        )
+        raise HTTPException(status_code=403, detail=f"devicecheck_{exc.reason}")
+
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
     try:
@@ -94,6 +120,7 @@ def enroll_device(payload: EnrollRequest, request: Request, db: Session = Depend
     # Validate public key format early
     if not validate_pubkey_format(payload.public_key):
         raise HTTPException(status_code=400, detail="public_key must be 'ed25519:<base64>'")
+    _enforce_devicecheck(payload)
 
     existing = db.get(DeviceToken, payload.device_id)
 

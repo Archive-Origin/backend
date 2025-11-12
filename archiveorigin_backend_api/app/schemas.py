@@ -1,3 +1,4 @@
+import base64
 from typing import Optional, Literal, Dict, Any
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from datetime import datetime
@@ -7,12 +8,26 @@ SHA256_PREFIXED = re.compile(r'^sha256:[0-9a-fA-F]{64}$')
 HEX64 = re.compile(r'^[0-9a-f]{64}$')
 
 class EnrollRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     device_id: str
     public_key: str
     platform: Optional[str] = "iOS"
     app_version: Optional[str] = None
+    bundle_id: Optional[str] = None
     current_token: Optional[str] = None
     force: bool = False
+    devicecheck_token: Optional[str] = Field(default=None, alias="devicecheckToken")
+
+    @field_validator("devicecheck_token")
+    @classmethod
+    def validate_devicecheck_token(cls, value):
+        if value is None:
+            return value
+        try:
+            base64.b64decode(value, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError("devicecheck_token must be base64-encoded") from exc
+        return value
 
 class EnrollResponse(BaseModel):
     token: str

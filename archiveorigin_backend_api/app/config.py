@@ -1,5 +1,6 @@
 import json
-from typing import Optional, Dict, Any
+from pathlib import Path
+from typing import Optional, Dict, Any, Literal
 
 from pydantic import Field, model_validator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,6 +38,13 @@ class Settings(BaseSettings):
         default_factory=lambda: ["title", "creator", "capture_time_utc", "description"]
     )
     trusted_client_versions: list[str] = Field(default_factory=list)
+    devicecheck_enabled: bool = False
+    devicecheck_team_id: Optional[str] = None
+    devicecheck_key_id: Optional[str] = None
+    devicecheck_private_key: Optional[str] = None
+    devicecheck_private_key_path: Optional[str] = None
+    devicecheck_environment: Literal["production", "development"] = "production"
+    devicecheck_allowed_bundle_ids: list[str] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(env_prefix='', env_file='.env', case_sensitive=False)
 
@@ -91,10 +99,47 @@ class Settings(BaseSettings):
                 return result
         return value
 
+    @field_validator("devicecheck_allowed_bundle_ids", mode="before")
+    @classmethod
+    def _parse_bundle_ids(cls, value):
+        if value in (None, "", []):
+            return []
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith("["):
+                try:
+                    parsed = json.loads(text)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except json.JSONDecodeError:
+                    pass
+            return [item.strip() for item in text.split(",") if item.strip()]
+        return value
+
     @model_validator(mode="after")
     def _apply_legacy_dir(self):
         if self.ledger_dir:
             self.ledger_repo_root = self.ledger_dir
+        if not self.devicecheck_private_key and self.devicecheck_private_key_path:
+            path = Path(self.devicecheck_private_key_path)
+            if path.is_file():
+                self.devicecheck_private_key = path.read_text().strip()
+        if self.devicecheck_enabled:
+            missing = []
+            if not self.devicecheck_team_id:
+                missing.append("DEVICECHECK_TEAM_ID")
+            if not self.devicecheck_key_id:
+                missing.append("DEVICECHECK_KEY_ID")
+            if not self.devicecheck_private_key:
+                missing.append("DEVICECHECK_PRIVATE_KEY or DEVICECHECK_PRIVATE_KEY_PATH")
+            if missing:
+                raise ValueError(
+                    "DeviceCheck enabled but missing required settings: " + ", ".join(missing)
+                )
         return self
 
 settings = Settings()
