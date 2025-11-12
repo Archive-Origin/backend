@@ -1,3 +1,11 @@
+"""
+DeviceCheck Integration Module - MOCK IMPLEMENTATION
+
+⚠️ THIS IS MOCK CODE FOR DEVELOPMENT
+Replace with real implementation when ready for production.
+See DEVELOPMENT_ROADMAP.md for details.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -6,20 +14,11 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
-import httpx
-import jwt
-
-from config import settings
-
 logger = logging.getLogger("archiveorigin.devicecheck")
-
-BASE_URLS = {
-    "production": "https://api.devicecheck.apple.com/v1",
-    "development": "https://api.development.devicecheck.apple.com/v1",
-}
 
 
 class DeviceCheckError(Exception):
+    """DeviceCheck API error"""
     def __init__(self, reason: str, status_code: Optional[int] = None):
         super().__init__(reason)
         self.reason = reason
@@ -28,11 +27,19 @@ class DeviceCheckError(Exception):
 
 @dataclass
 class DeviceCheckResult:
+    """Mock DeviceCheck validation result"""
     transaction_id: str
     timestamp: int
 
 
 class DeviceCheckClient:
+    """
+    MOCK DeviceCheck Client
+    
+    This is a mock implementation for development.
+    Replace with real httpx/jwt implementation for production.
+    """
+    
     def __init__(
         self,
         team_id: str,
@@ -44,62 +51,58 @@ class DeviceCheckClient:
         self.team_id = team_id
         self.key_id = key_id
         self.private_key = private_key
-        self.base_url = BASE_URLS.get(environment, BASE_URLS["production"])
-        self.http = httpx.Client(timeout=timeout_seconds)
+        self.environment = environment
+        self.timeout_seconds = timeout_seconds
+        logger.info("MOCK DeviceCheckClient initialized (environment=%s)", environment)
 
     def _jwt(self) -> str:
-        headers = {"alg": "ES256", "kid": self.key_id}
-        payload = {"iss": self.team_id, "iat": int(time.time())}
-        return jwt.encode(payload, self.private_key, algorithm="ES256", headers=headers)
+        """MOCK: Generate JWT token"""
+        # TODO: Replace with real jwt.encode() using ES256
+        return f"mock_jwt_token_{int(time.time())}"
 
-    def validate(self, device_token: str, device_id: Optional[str] = None, bundle_id: Optional[str] = None) -> DeviceCheckResult:
+    def validate(
+        self, 
+        device_token: str, 
+        device_id: Optional[str] = None, 
+        bundle_id: Optional[str] = None
+    ) -> DeviceCheckResult:
+        """
+        MOCK: Validate device token
+        
+        TODO: Replace with real httpx POST to Apple's DeviceCheck API
+        """
         if not device_token:
             raise DeviceCheckError("missing_device_token")
-        token = self._jwt()
+        
+        # MOCK: Always return success
         transaction_id = str(uuid.uuid4())
-        body = {
-            "device_token": device_token,
-            "transaction_id": transaction_id,
-            "timestamp": int(time.time()),
-        }
-        headers = {"Authorization": f"Bearer {token}"}
-        response = self.http.post(f"{self.base_url}/validate_device_token", json=body, headers=headers)
-        if response.status_code == 200:
-            logger.debug("DeviceCheck validation success for device_id=%s bundle_id=%s", device_id, bundle_id)
-            return DeviceCheckResult(transaction_id=transaction_id, timestamp=body["timestamp"])
-
-        reason = response.text or "devicecheck_error"
-        logger.warning(
-            "DeviceCheck validation failed status=%s device_id=%s bundle_id=%s response=%s",
-            response.status_code,
+        timestamp = int(time.time())
+        
+        logger.debug(
+            "MOCK DeviceCheck validation for device_id=%s bundle_id=%s",
             device_id,
-            bundle_id,
-            reason,
+            bundle_id
         )
-        if response.status_code == 400:
-            raise DeviceCheckError("invalid_device_token", response.status_code)
-        if response.status_code == 401:
-            raise DeviceCheckError("unauthorized", response.status_code)
-        if response.status_code == 429:
-            raise DeviceCheckError("rate_limited", response.status_code)
-        raise DeviceCheckError("devicecheck_service_error", response.status_code)
+        
+        return DeviceCheckResult(transaction_id=transaction_id, timestamp=timestamp)
 
     def close(self):
-        self.http.close()
+        """Close HTTP client"""
+        logger.debug("MOCK DeviceCheckClient closed")
 
 
 _client: Optional[DeviceCheckClient] = None
 
 
 def get_devicecheck_client() -> DeviceCheckClient:
+    """Get or create singleton DeviceCheck client"""
     global _client
     if _client is None:
-        if not settings.devicecheck_enabled:
-            raise DeviceCheckError("devicecheck_disabled")
+        # TODO: Load from settings when ready for production
         _client = DeviceCheckClient(
-            team_id=settings.devicecheck_team_id,
-            key_id=settings.devicecheck_key_id,
-            private_key=settings.devicecheck_private_key,
-            environment=settings.devicecheck_environment,
+            team_id="MOCK_TEAM_ID",
+            key_id="MOCK_KEY_ID",
+            private_key="MOCK_PRIVATE_KEY",
+            environment="development",
         )
     return _client
