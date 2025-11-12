@@ -1,5 +1,5 @@
 # Archive Origin Backend Roadmap
 
-1. DeviceCheck integration
-2. Attestation/ledger hardening
-3. Docs & tests
+- [x] DeviceCheck integration
+- [x] Attestation/ledger hardening (attestation seeding + CRL refresh utilities)
+- [ ] Docs & tests (OpenAPI, runbooks, expanded verification tests)

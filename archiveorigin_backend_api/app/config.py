@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, Literal
 
@@ -45,6 +46,11 @@ class Settings(BaseSettings):
     devicecheck_private_key_path: Optional[str] = None
     devicecheck_environment: Literal["production", "development"] = "production"
     devicecheck_allowed_bundle_ids: list[str] = Field(default_factory=list)
+    attestation_seed_dir: Optional[str] = None
+    crl_sources: list[str] = Field(default_factory=list)
+    crl_auto_refresh: bool = False
+    crl_refresh_interval_seconds: int = 3600
+    crl_request_timeout_seconds: float = 5.0
 
     model_config = SettingsConfigDict(env_prefix='', env_file='.env', case_sensitive=False)
 
@@ -120,6 +126,27 @@ class Settings(BaseSettings):
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
 
+    @field_validator("crl_sources", mode="before")
+    @classmethod
+    def _parse_crl_sources(cls, value):
+        if value in (None, "", []):
+            return []
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith("["):
+                try:
+                    parsed = json.loads(text)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except json.JSONDecodeError:
+                    pass
+            return [item.strip() for item in text.split(",") if item.strip()]
+        return value
+
     @model_validator(mode="after")
     def _apply_legacy_dir(self):
         if self.ledger_dir:
@@ -140,6 +167,11 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "DeviceCheck enabled but missing required settings: " + ", ".join(missing)
                 )
+        if self.attestation_seed_dir:
+            attn_path = Path(self.attestation_seed_dir)
+            if not attn_path.exists():
+                logger = logging.getLogger("archiveorigin.config")
+                logger.warning("attestation_seed_dir %s does not exist", attn_path)
         return self
 
 settings = Settings()

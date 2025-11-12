@@ -11,7 +11,7 @@ import logging
 import uuid
 
 from config import settings
-from db import get_db, engine
+from db import get_db, engine, SessionLocal
 from models import Base, DeviceToken, CaptureRecord, AttestationCertificate
 from schemas import (
     EnrollRequest,
@@ -35,6 +35,8 @@ from rate_limit import global_rate_limiter
 from verification import perform_verification, perform_ledger_lookup
 from time_sync import trusted_time
 from devicecheck import get_devicecheck_client, DeviceCheckError
+from attestation import ingest_certificates_from_dir
+from crl import refresh_crls
 
 logger = logging.getLogger("archiveorigin.api")
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -58,6 +60,28 @@ with engine.begin() as conn:
         conn.exec_driver_sql(open("/app/migrations/init.sql", "r").read())
     except Exception as e:
         logger.info("Migrations already applied or failed non-fatally: %s", e)
+
+def _seed_attestation_store():
+    if not settings.attestation_seed_dir:
+        return
+    try:
+        with SessionLocal() as session:
+            ingest_certificates_from_dir(settings.attestation_seed_dir, session)
+            session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to ingest attestation certs: %s", exc)
+
+def _maybe_refresh_crls():
+    if not settings.crl_auto_refresh:
+        return
+    try:
+        with SessionLocal() as session:
+            refresh_crls(session)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("CRL refresh failed: %s", exc)
+
+_seed_attestation_store()
+_maybe_refresh_crls()
 
 def _require_tls(request: Request):
     if not settings.tls_required:
